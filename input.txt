@@ -1,0 +1,13 @@
+-----------------------
+10,10
+XXXXXXXXXX
+XXMXXMXXPP
+XXXXXXXXXX
+XXXXXMXXXX
+XXXXXX    
+XXXXXX    
+XXMXXX    
+XXXXXXXXXX
+PPXXXMXXXX
+XXXXXXXXXX
+-------------------------
