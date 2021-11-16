@@ -4,6 +4,7 @@ import regex as re
 import pandas as pd
 import pygad
 import random as r
+import copy
 
 width = 0
 height = 0
@@ -56,6 +57,8 @@ def translate2DToArray(arr):
 
     return newArr
 
+# Funciones para la interaccion con archivos
+
 
 def leer_habitacion(file_name):
     global roomMatrix, width, height
@@ -86,12 +89,15 @@ def leer_habitacion(file_name):
     print(f"habitacion:")
     prettyPrintArray(roomMatrix)
 
+# Funciones para generar markup de la habitacion
+
 
 def generateRoomMarkup(roomMatrix, peopleMatrix):
     cssString = """
     .room {
       display: flex;
       flex-direction: column;
+      margin: 10px;
     }
     .row {
       display: flex;
@@ -156,11 +162,7 @@ def generateRoomMarkup(roomMatrix, peopleMatrix):
     return f"{htmlWrapperInit}{roomWrapperInit}{output}{roomWrapperEnd}{htmlWrapperEnd}"
 
 
-# def displayRoom(roomMatrix, peopleMatrix):
-#    return display(HTML(generateRoomMarkup(roomMatrix, peopleMatrix)))
-
-
-# Función para generar nuevas soluciones y poblacion
+# Funciones del algoritmo genetico
 def generateSolution():
     global width, height, roomMatrix
     generatedSolution = []
@@ -310,44 +312,47 @@ def checkSorroundingCellsForPeople(solution, i, j):
     #print("completed check around cell: ",i,j)
     return True
 
-# Determinar fenotipo
 
-
-def generatePhenotype(solution):
+def generatePhenotype(genotype):
+    # Determinar fenotipo
     global width, height, roomMatrix
 
+    phenotype = copy.deepcopy(genotype)
     peopleCounter = 0
 
-    if len(solution) == width * height:
-        solution = translateArrayTo2D(solution)
+    if len(phenotype) == width * height:
+        phenotype = translateArrayTo2D(phenotype)
 
     for i in range(height):
         for j in range(width):
-            solCell = solution[i][j]
+            solCell = phenotype[i][j]
             roomCell = roomMatrix[i][j]
 
             # Si la celda actual contiene a una persona
             if solCell == 1:
                 # Si se encuentra en una celda invalida, rip
                 if roomCell == " " or roomCell == "P" or roomCell == "M":
-                    solution[i][j] = 0
+                    phenotype[i][j] = 0
                     continue
 
                 # Verifico si la persona no tiene a otra alrededor de ella
-                isValid = checkSorroundingCellsForPeople(solution, i, j)
+                isValid = checkSorroundingCellsForPeople(phenotype, i, j)
                 if isValid:
                     peopleCounter += 1
                     continue
                 # Si no, rip
                 else:
-                    solution[i][j] = 0
+                    phenotype[i][j] = 0
                     continue
 
-    return solution, peopleCounter
+    return phenotype, peopleCounter
 
 
+# Funciones relacionadas a Pygad
+# Contiene el valor de fitness de la generacion anterior, actualizada en cada iteracion
 last_fitness = 0
-max_people_at = [0, 0, []]
+# Contiene en orden, generacion, numero de personas, fenotipo y genotipo de la mejor solucion encontrada en cierto momento, chequea en cada iteracion si debe ser actualizada
+max_people_at = [0, 0, [], []]
 
 
 def callback_generation(ga_instance):
@@ -361,27 +366,29 @@ def callback_generation(ga_instance):
           ", Fitness Best = {fitness:.3f}".format(fitness=ga_instance.best_solution()[1]),
           ", Change = {change:.3f}".format(change=ga_instance.best_solution()[1] - last_fitness))
 
-    fitnessFunction(ga_instance.best_solution()[0], -1)
-    phenotype, peopleCounter = generatePhenotype(ga_instance.best_solution()[0])
+    genotype = translateArrayTo2D(ga_instance.best_solution()[0])
+    fitnessFunction(genotype, -1)
+    phenotype, peopleCounter = generatePhenotype(genotype)
     print(f"# Personas: {peopleCounter}")
+
     if peopleCounter > max_people_at[1]:
-        max_people_at = [generation, peopleCounter, phenotype]
-    #displayRoom(roomMatrix, phenotype)
+        max_people_at = [generation, peopleCounter, phenotype, genotype]
 
     last_fitness = ga_instance.best_solution()[1]
 
-    if ga_instance.generations_completed % 10 == 0:
-        # ga_instance.plot_fitness()
-        pass
+    # if ga_instance.generations_completed % 10 == 0:
+    #    ga_instance.plot_fitness()
+    #    pass
 
-    textHolder.markdown(f"""
+    page_set_summary_text(f"""
     <p>Generation: {generation}, Best fitness: {best_fitness}, Change: {fitness_delta}</p>
     <p>Best solution so far: {max_people_at[1]} people in gen {max_people_at[0]}</p>
-    """, unsafe_allow_html=True)
-    roomHolder.markdown(f"""
-    Current gen best room has {peopleCounter} inhabitants and looks like: \n{generateRoomMarkup(roomMatrix, phenotype)}
-    Best solution so far is in gen {max_people_at[0]}. The room has {max_people_at[1]} inhabitants and looks like: \n{generateRoomMarkup(roomMatrix, max_people_at[2])}
-    """, unsafe_allow_html=True)
+    """)
+
+    page_set_room_preview(f"""
+    Current gen best room has {peopleCounter} inhabitants and looks like: \n{generateRoomMarkup(roomMatrix, phenotype)}{generateRoomMarkup(roomMatrix, genotype)}
+    Best solution so far is in gen {max_people_at[0]}. The room has {max_people_at[1]} inhabitants and looks like: \n{generateRoomMarkup(roomMatrix, max_people_at[2])}{generateRoomMarkup(roomMatrix, max_people_at[3])}
+    """)
 
 
 def run_algorithm():
@@ -410,12 +417,14 @@ def run_algorithm():
                            )
     ga_instance.run()
 
-# FUNCIONES PERTINENTES A LA GENERACION DE LA PAGINA WEB CON STREAMLIT
+
+# Streamlit
 
 
 def generar_pagina():
+    # Generacion de la pagina web con Streamlit
     st.set_page_config(
-        page_title="IA - Clasificador de frutas",
+        page_title="AG - Distanciamiento Social",
         page_icon="🍎"
     )
 
@@ -433,21 +442,30 @@ def generar_pagina():
 
     st.button("Start simulation", on_click=iniciar_script)
 
+    # Declaro e inicializo componentes de pantalla que seran poblados mas adelante por el algoritmo
     global textHolder, roomHolder
     textHolder = st.empty()
     roomHolder = st.empty()
 
 
+def page_set_summary_text(new_text):
+    textHolder.markdown(new_text, unsafe_allow_html=True)
+
+
+def page_set_room_preview(new_markup):
+    roomHolder.markdown(new_markup, unsafe_allow_html=True)
+
+
+# Control de flujo general
+
+
 def iniciar_script():
     run_algorithm()
-    pass
 
 
 def main():
     generar_pagina()
-
     leer_habitacion('input.txt')
-    pass
 
 
 if __name__ == "__main__":
